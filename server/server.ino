@@ -64,6 +64,8 @@ void blinkSlow() {
 	digitalWrite(ledpin, LOW);
 	ledState = LOW;
 	Serial.println("Blinking complete, turning own LED off");
+	onLocally = true;
+	delay(5);
 }
 
 void blinkQuick() {
@@ -94,6 +96,8 @@ void blinkQuick() {
 	digitalWrite(ledpin, LOW);
 	ledState = LOW;
 	Serial.println("Blinking complete, turning own LED off");
+	onLocally = true;
+	delay(5);
 }
 
 class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
@@ -101,43 +105,43 @@ class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
 		characteristicValue = pCharacteristic->getValue();
 		if (characteristicValue == "0") {
 			Serial.println("Server has received a turn-off write");
+			onLocally = true;
+			startCountdown = false;
+			count = 0;
 			ledState = LOW;
 			digitalWrite(ledpin, LOW);
-			count = 0;
-			startCountdown = false;
 			ledSyncState = bothOff;
-			onLocally = true;
 			Serial.println("And so it is turning own LED off");
 		} else if (characteristicValue == "1") {
 			Serial.println("Server has received a turn-on write");
+			onLocally = false;
 			ledState = HIGH;
 			digitalWrite(ledpin, HIGH);
 			ledSyncState = bothOn;
-			onLocally = false;
 			Serial.println("And so it is turning own LED on");
 		} else if (characteristicValue == "2") {
 			Serial.println("Server has received a blink slow write");
+			onLocally = false;
+			startCountdown = false;
+			count = 0;
 			ledSyncState = bothBlinkSlow;
-			Serial.println("And so it is blinking own LED slowly before turning off");
 			blinkSlow();
 			ledSyncState = bothOff;
-			startCountdown = false;
-			count = 0;
 		} else if (characteristicValue == "3") {
 			Serial.println("Server has received a blink quick write");
-			ledSyncState = bothBlinkQuick;
-			Serial.println("And so it is blinking own LED quickly before turning off");
-			blinkQuick();
-			ledSyncState = bothOff;
+			onLocally = false;
 			startCountdown = false;
 			count = 0;
+			ledSyncState = bothBlinkQuick;
+			blinkQuick();
+			ledSyncState = bothOff;
 		}
 	}
 };
 
 void onButtonPress() {
-	if (ledState == HIGH) {
-		if (onLocally == true) {
+	if (ledState == HIGH) { // If we're turning off the local LED
+		if (onLocally == true) { // If we're turning off a locally turned-on LED
 			ledState = LOW;
 			startCountdown = false;
 			count = 0;
@@ -151,7 +155,7 @@ void onButtonPress() {
 				Serial.println("Disconnected and notification not sent");
 			}
 			digitalWrite(ledpin, ledState);
-		} else {
+		} else { // If we're turning off a remotely turned-on LED
 			startCountdown = false;
 			count = 0;
 			Serial.println("Turned on remotely and turning off, triggering quick blink; resetting countdown");
@@ -165,9 +169,8 @@ void onButtonPress() {
 				Serial.println("Disconnected and notification not sent");
 				blinkQuick();
 			}
-			onLocally = true;
 		}
-	} else {
+	} else { // If we're turning on the local LED
 		ledState = HIGH;
 		onLocally = true;
 		startCountdown = true;
@@ -242,21 +245,17 @@ void loop() {
 	buttonPreviousState = buttonCurrentState;
 	if (startCountdown == true) {
 		Serial.println(count);
-		if (onLocally == true) {
-			count++;
-			if (count >= countMax) {
-				count = 0;
-				startCountdown = false;
-				onLocally = true;
+		count++;
+		if (count >= countMax) {
+			count = 0;
+			startCountdown = false;
+			if (onLocally == true) {
 				ledSyncState = bothBlinkSlow;
 				pCharacteristic->setValue((uint8_t*)&ledSyncState, 4);
 				pCharacteristic->notify();
 				Serial.println("Server has sent bothBlinkSlow notification");
 				blinkSlow();
 			}
-		} else {
-			startCountdown = false;
-			count = 0;
 		}
 	}
 	
